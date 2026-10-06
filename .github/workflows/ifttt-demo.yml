@@ -1,0 +1,23 @@
+name: IFTTT coupling demo
+on:
+  pull_request:
+    branches: [demo/coupling-base]
+    types: [opened, synchronize, reopened, edited]
+permissions:
+  contents: read
+jobs:
+  coupling:
+    name: IFTTT coupling demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+      - name: Build the checker
+        run: go build -o "$RUNNER_TEMP/ifttt" ./cmd/ifttt
+      - name: Check declared couplings
+        run: '"$RUNNER_TEMP/ifttt" check --github --fail-on-findings'
