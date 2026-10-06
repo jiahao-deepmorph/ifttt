@@ -1,0 +1,24 @@
+name: IFTTT Lint
+description: Check declared cross-file change couplings in pull requests
+author: Jiahao Cai
+branding:
+  icon: link
+  color: blue
+inputs:
+  fail-on-findings:
+    description: Fail the job for coupling findings (annotation errors always fail)
+    default: 'false'
+  base-ref:
+    description: Override the PR base SHA used to compute the merge base
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Check change couplings
+      shell: bash
+      env:
+        IFTTT_ACTION_PATH: ${{ github.action_path }}
+        IFTTT_ACTION_REPOSITORY: ${{ github.action_repository }}
+        IFTTT_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        IFTTT_BASE_REF: ${{ inputs.base-ref }}
+      run: bash "$IFTTT_ACTION_PATH/scripts/run-action.sh"

@@ -1,0 +1,35 @@
+name: Release
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+      - name: Verify embedded release version
+        shell: bash
+        run: test "$(cat action-version)" = "$GITHUB_REF_NAME"
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Move major version tag after successful release
+        shell: bash
+        run: |
+          major="${GITHUB_REF_NAME%%.*}"
+          git tag -f "$major" "$GITHUB_SHA"
+          git push origin "refs/tags/$major" --force
