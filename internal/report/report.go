@@ -11,10 +11,16 @@ import (
 )
 
 var overridePattern = regexp.MustCompile(`(?:^|[^A-Za-z0-9_])NO_IFTTT=([^\r\n]*)`)
+var htmlComment = regexp.MustCompile(`(?s)<!--.*?(?:-->|$)`)
+var placeholder = regexp.MustCompile(`^<[^<>]*>`)
 
+// Override returns the first real reason. Text in HTML comments, which GitHub
+// hides (for example, a PR template explaining the override), and placeholders
+// such as NO_IFTTT=<reason> do not count.
 func Override(body string) string {
+	body = htmlComment.ReplaceAllString(body, "")
 	for _, m := range overridePattern.FindAllStringSubmatch(body, -1) {
-		if reason := strings.TrimSpace(m[1]); reason != "" {
+		if reason := strings.TrimSpace(m[1]); reason != "" && !placeholder.MatchString(reason) {
 			return reason
 		}
 	}

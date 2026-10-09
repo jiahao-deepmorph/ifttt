@@ -13,6 +13,11 @@ func TestOverride(t *testing.T) {
 		{"", ""}, {"NO_IFTTT=", ""}, {"NO_IFTTT= \t\r\nnext line", ""},
 		{"Reason: NO_IFTTT=done in #123\nother text", "done in #123"},
 		{"NOT_NO_IFTTT=skip", ""}, {"NO_IFTTT= \nNO_IFTTT=second", "second"},
+		// Placeholders and hidden HTML comments (for example, a PR template
+		// explaining the override) must not silence the check.
+		{"NO_IFTTT=<reason>", ""}, {"Add `NO_IFTTT=<reason>` if needed", ""},
+		{"<!-- Add NO_IFTTT=skip to silence IFTTT -->", ""},
+		{"<!--\nNO_IFTTT=hidden\n-->\nNO_IFTTT=done in #7", "done in #7"},
 	} {
 		if got := Override(tt.body); got != tt.want {
 			t.Errorf("%q: %q != %q", tt.body, got, tt.want)

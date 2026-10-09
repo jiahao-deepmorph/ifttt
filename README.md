@@ -61,7 +61,9 @@ changes use a general or file annotation plus the summary; they have no added
 line to annotate. No review comments or write token are needed.
 
 Put `NO_IFTTT=<reason>` in the PR description to suppress coupling warnings. The
-reason must contain non-whitespace text on the same line. This suppresses all
+reason must contain non-whitespace text on the same line. Text inside HTML
+comments (`<!-- … -->`, hidden by GitHub, as in PR templates) and placeholder
+reasons starting with `<…>` are ignored. This suppresses all
 coupling findings for that PR but **never annotation errors**. The `edited` event
 in the example starts a fresh run with the updated description; rerunning an old
 event is not a way to refresh its body. The reason is recorded in the summary.
@@ -151,11 +153,16 @@ The exact extension table is in [comments.go](internal/lint/comments.go).
 Unknown extensions and files containing NUL bytes are ignored as annotation
 sources; they can still be whole-file targets.
 
-The lightweight lexer tracks ordinary quotes, backtick strings, common triple
-quotes, and block comments across lines. It skips directives inside those
-strings, Markdown fences, and YAML block scalars. It is not a full language
-parser: heredocs, custom raw-string delimiters, regex literals, interpolation,
-and embedded languages are not fully modeled.
+The lightweight lexer knows each language's string delimiters and skips
+directives inside strings, block comments, Markdown fences, and YAML block
+scalars. Strings that cannot span lines end with their line, so a stray quote
+(`don't` in YAML or TeX, a Rust lifetime, a C++ digit separator) affects only
+its own line. Only languages with real multi-line strings carry string state
+across lines: triple quotes, Go and JavaScript backticks, Rust strings, and
+shell, Ruby, Perl, R, and Lisp strings. If a string the lexer cannot close
+hides a directive, that is an annotation error rather than a silent skip.
+It is not a full language parser: heredocs, custom raw-string delimiters, regex
+literals, interpolation, and embedded languages are not fully modeled.
 Use ordinary standalone comments outside those constructs. This limitation is
 explicit rather than a guarantee of perfect string detection in every language.
 
