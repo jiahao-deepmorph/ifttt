@@ -43,6 +43,31 @@ func TestParse(t *testing.T) {
 		{"html prose", "a.html", "Don't ignore this.\n<!-- LINT.IfChange(x) -->\nwords\n<!-- LINT.ThenChange() -->", 1, 0},
 		{"html attribute string", "a.html", "<div title=\"\n<!-- LINT.IfChange(fake) -->\n\">", 0, 0},
 		{"yaml scalar", "a.yaml", "script: |\n  # LINT.IfChange(fake)\n# LINT.IfChange(real)\na: b\n# LINT.ThenChange()", 1, 0},
+		// A stray quote must not hide later directives. Single-line string
+		// state ends with the line; quote characters that are not strings in a
+		// language never open one.
+		{"yaml apostrophe", "a.yaml", "desc: don't touch\n# LINT.IfChange(x)\nk: v\n# LINT.ThenChange()", 1, 0},
+		{"yaml quoted scalar", "a.yaml", "k: 'it''s'\n# LINT.IfChange(x)\nk: v\n# LINT.ThenChange()", 1, 0},
+		{"yaml template quotes", "a.yaml", "v: {{ join \",\" . | quote }}\n# LINT.IfChange(x)\nk: v\n# LINT.ThenChange()", 1, 0},
+		{"yaml backtick", "a.yaml", "msg: press ` to open\n# LINT.IfChange(x)\nk: v\n# LINT.ThenChange()", 1, 0},
+		{"rust lifetime", "a.rs", "fn f(x: &'static str) {}\n// LINT.IfChange(x)\nx\n// LINT.ThenChange()", 1, 0},
+		{"rust quote chars", "a.rs", "let q = '\"';\nlet e = '\\'';\nlet u = '€';\n// LINT.IfChange(x)\nx\n// LINT.ThenChange()", 1, 0},
+		{"rust multiline string", "a.rs", "let s = \"\n// LINT.IfChange(fake)\n\";", 0, 0},
+		{"tex apostrophe", "a.tex", "It's fine.\n% LINT.IfChange(x)\nx\n% LINT.ThenChange()", 1, 0},
+		{"clojure quote", "a.clj", "(def xs '(1 2 3))\n; LINT.IfChange(x)\nx\n; LINT.ThenChange()", 1, 0},
+		{"clojure char literal", "a.clj", "(def q \\\")\n; LINT.IfChange(x)\nx\n; LINT.ThenChange()", 1, 0},
+		{"ini apostrophe", "a.ini", "name = Bob's\n; LINT.IfChange(x)\nx\n; LINT.ThenChange()", 1, 0},
+		{"shell escaped quote", "a.sh", "foo=it\\'s\n# LINT.IfChange(x)\nx\n# LINT.ThenChange()", 1, 0},
+		{"shell multiline string", "a.sh", "echo '\n# LINT.IfChange(fake)\n'", 0, 0},
+		{"cpp digit separator", "a.cc", "int n = 1'000;\n// LINT.IfChange(x)\nx\n// LINT.ThenChange()", 1, 0},
+		{"c unterminated string", "a.c", "char *s = \"oops;\n// LINT.IfChange(x)\nx\n// LINT.ThenChange()", 1, 0},
+		{"c line continuation", "a.c", "char *s = \"a\\\n// LINT.IfChange(fake)\n\";", 0, 0},
+		{"matlab transpose", "a.m", "B = A';\n% LINT.IfChange(x)\nx\n% LINT.ThenChange()", 1, 0},
+		{"markdown less-than", "a.md", "If a < b, don't stop.\n<!-- LINT.IfChange(x) -->\nwords\n<!-- LINT.ThenChange() -->", 1, 0},
+		{"markdown lone backtick", "a.md", "Press the ` key.\n<!-- LINT.IfChange(x) -->\nwords\n<!-- LINT.ThenChange() -->", 1, 0},
+		// When a string the scanner cannot close hides directives, say so.
+		{"unclosed string hides directives", "a.sh", "cat <<EOF\ndon't\nEOF\n# LINT.IfChange(x)\nx\n# LINT.ThenChange()\n", 0, 1},
+		{"closed string hides nothing", "a.go", "var s = `\n// LINT.IfChange(x)\n// LINT.ThenChange()\n`\n", 0, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -14,9 +14,8 @@ var openPattern = regexp.MustCompile(`^LINT\.IfChange(?:\(([A-Za-z0-9_.-]+)\))?$
 // Parse reads standalone comment directives. Unsupported extensions are ignored.
 // The scanner is intentionally a small lexer, not a language parser; see README.
 func Parse(filename, content string) ([]Region, []Diagnostic) {
-	comments := commentLines(filename, content)
+	comments, diagnostics := commentLines(filename, content)
 	var regions []Region
-	var diagnostics []Diagnostic
 	var active *Region
 	labels := map[string]bool{}
 	report := func(line int, message string) {
