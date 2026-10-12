@@ -2,6 +2,7 @@ package report
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -17,6 +18,11 @@ func TestOverride(t *testing.T) {
 		// explaining the override) must not silence the check.
 		{"NO_IFTTT=<reason>", ""}, {"Add `NO_IFTTT=<reason>` if needed", ""},
 		{"<!-- Add NO_IFTTT=skip to silence IFTTT -->", ""},
+		{"NO_<!-- hidden -->IFTTT=skip", ""},
+		{"prefix<!-- hidden -->NO_IFTTT=skip", "skip"},
+		{"NO_IFTTT=<!-- hidden\ncomment -->next line", ""},
+		{"NO_IFTTT=done<!-- hidden --> in #7", "done  in #7"},
+		{"<!-- unclosed\nNO_IFTTT=hidden", ""},
 		{"<!--\nNO_IFTTT=hidden\n-->\nNO_IFTTT=done in #7", "done in #7"},
 	} {
 		if got := Override(tt.body); got != tt.want {
@@ -82,3 +88,19 @@ func TestDeletedSourceHasNoHeadLocation(t *testing.T) {
 		t.Fatal(out.String())
 	}
 }
+
+func TestOutputFailures(t *testing.T) {
+	result := lint.Result{Findings: []lint.Finding{{Path: "a.go", Start: 2, End: 2, Target: lint.Target{Path: "b.go"}}}}
+	for _, github := range []bool{false, true} {
+		if err := Write(failingWriter{}, result, "", github); err == nil {
+			t.Fatal("report output failure was ignored")
+		}
+	}
+	if err := Summary(failingWriter{}, result, ""); err == nil {
+		t.Fatal("summary output failure was ignored")
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }

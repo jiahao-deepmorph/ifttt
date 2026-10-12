@@ -19,8 +19,11 @@ jobs:
         with:
           go-version: stable
           cache: false
-      - run: go test -race ./...
+      - run: go test -race -cover ./...
       - run: go vet ./...
+      - name: Fuzz annotation scanners
+        if: runner.os == 'Linux'
+        run: go test ./internal/lint -run '^$' -fuzz '^FuzzParse$' -fuzztime=15s -parallel=2
       - name: Check formatting
         shell: bash
         run: test -z "$(gofmt -l cmd internal)"

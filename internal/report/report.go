@@ -18,7 +18,11 @@ var placeholder = regexp.MustCompile(`^<[^<>]*>`)
 // hides (for example, a PR template explaining the override), and placeholders
 // such as NO_IFTTT=<reason> do not count.
 func Override(body string) string {
-	body = htmlComment.ReplaceAllString(body, "")
+	// Hidden text must not join visible tokens or move a reason onto the
+	// override's line. Keep line boundaries and a space between fragments.
+	body = htmlComment.ReplaceAllStringFunc(body, func(comment string) string {
+		return " " + strings.Repeat("\n", strings.Count(comment, "\n")) + strings.Repeat("\r", strings.Count(comment, "\r"))
+	})
 	for _, m := range overridePattern.FindAllStringSubmatch(body, -1) {
 		if reason := strings.TrimSpace(m[1]); reason != "" && !placeholder.MatchString(reason) {
 			return reason

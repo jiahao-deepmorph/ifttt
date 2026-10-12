@@ -28,6 +28,9 @@ func TestCheckFixtures(t *testing.T) {
 		errors        int
 	}{
 		{"unchanged", nil, nil, nil, 0, 0},
+		{"empty source deleted", map[string]string{"a.go": "// LINT.IfChange(a)\n// LINT.ThenChange(b.go:b)\n"}, nil, []string{"a.go"}, 0, 0},
+		{"empty source markers replaced", map[string]string{"a.go": "// LINT.IfChange(a)\n// LINT.ThenChange(b.go:b)\n"}, map[string]string{"a.go": "// LINT.IfChange(a) \n// LINT.ThenChange(b.go)\n"}, nil, 0, 0},
+		{"empty target markers changed", map[string]string{"b.go": "// LINT.IfChange(b)\n// LINT.ThenChange()\n"}, map[string]string{"a.go": region("a", "new", "b.go:b"), "b.go": "// LINT.IfChange(b) \n// LINT.ThenChange() \n"}, nil, 1, 0},
 		{"missing counterpart", nil, map[string]string{"a.go": region("a", "new", "b.go:b")}, nil, 1, 0},
 		{"both bodies edited", nil, map[string]string{"a.go": region("a", "new", "b.go:b"), "b.go": region("b", "changed", "")}, nil, 0, 0},
 		{"target deletion only", nil, map[string]string{"a.go": region("a", "new", "b.go:b"), "b.go": region("b", "two", "")}, nil, 0, 0},

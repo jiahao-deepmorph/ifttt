@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -42,6 +43,8 @@ func TestParse(t *testing.T) {
 		{"markdown fence", "a.md", "```html\n<!-- LINT.IfChange(fake) -->\n```\n<!-- LINT.IfChange(real) -->\nx\n<!-- LINT.ThenChange() -->", 1, 0},
 		{"html prose", "a.html", "Don't ignore this.\n<!-- LINT.IfChange(x) -->\nwords\n<!-- LINT.ThenChange() -->", 1, 0},
 		{"html attribute string", "a.html", "<div title=\"\n<!-- LINT.IfChange(fake) -->\n\">", 0, 0},
+		{"yaml scalar indicator in comment", "a.yaml", "key: value # example: |\n  # LINT.IfChange(real)\n  key: value\n  # LINT.ThenChange()", 1, 0},
+		{"yaml sequence scalar ends at sibling", "a.yaml", "- script: |\n    # LINT.IfChange(fake)\n  # LINT.IfChange(real)\n  key: value\n  # LINT.ThenChange()", 1, 0},
 		{"yaml scalar", "a.yaml", "script: |\n  # LINT.IfChange(fake)\n# LINT.IfChange(real)\na: b\n# LINT.ThenChange()", 1, 0},
 		// A stray quote must not hide later directives. Single-line string
 		// state ends with the line; quote characters that are not strings in a
@@ -109,14 +112,47 @@ func TestContinuationBoundariesAndDedup(t *testing.T) {
 }
 
 func FuzzParse(f *testing.F) {
-	f.Add("// LINT.IfChange(x)\nbody\n// LINT.ThenChange(a.go)")
-	f.Add("/* LINT.ThenChange(\n")
-	f.Fuzz(func(t *testing.T, text string) {
-		regions, _ := Parse("a.go", text)
+	f.Add("a.go", "// LINT.IfChange(x)\nbody\n// LINT.ThenChange(a.go)")
+	f.Add("a.c", "/* LINT.ThenChange(\n")
+	f.Add("a.yaml", "- script: |\n    # LINT.IfChange(fake)\n  # LINT.IfChange(real)\n  x: y\n  # LINT.ThenChange()")
+	f.Add("a.md", "```html\n<!-- LINT.IfChange(fake) -->\n```\n")
+	f.Add("a.rs", "let q = '\\'';\n// LINT.IfChange(x)\nbody\n// LINT.ThenChange()")
+	f.Add("a.sh", "echo '\n# LINT.IfChange(fake)\n'")
+	f.Add("a.py", "# LINT.IfChange(x)\nbody\n# LINT.ThenChange(\n# a.py:x\n# )")
+	f.Fuzz(func(t *testing.T, filename, text string) {
+		regions, _ := Parse(filename, text)
 		for _, r := range regions {
 			if r.Open >= r.Close || r.Close > r.End || r.End > strings.Count(text, "\n")+1 {
 				t.Fatalf("invalid region: %+v", r)
 			}
 		}
 	})
+}
+
+func TestYAMLScalarBoundaries(t *testing.T) {
+	for _, prefix := range []string{
+		"- script: |\n    # LINT.IfChange(fake)\n    # LINT.ThenChange()\n",
+		"- script: >-\n    # LINT.IfChange(fake)\n    # LINT.ThenChange()\n",
+		"-  script: |+2 # folded example\n     # LINT.IfChange(fake)\n     # LINT.ThenChange()\n",
+		"- - script: |\n      # LINT.IfChange(fake)\n      # LINT.ThenChange()\n",
+		"key: value # example: |\n",
+		"key: \"example: |\"\n",
+	} {
+		t.Run(prefix, func(t *testing.T) {
+			// Use the mapping's indentation for the real annotations.
+			indent := "  "
+			if strings.HasPrefix(prefix, "-  ") {
+				indent = "   "
+			} else if strings.HasPrefix(prefix, "- - ") {
+				indent = "    "
+			}
+			content := prefix + indent + "# LINT.IfChange(real)\n" + indent + "key: value\n" + indent + "# LINT.ThenChange()\n"
+			got, diagnostics := Parse("a.yaml", content)
+			open := strings.Count(prefix, "\n") + 1
+			want := []Region{{Label: "real", Open: open, Close: open + 2, End: open + 2}}
+			if len(diagnostics) != 0 || !reflect.DeepEqual(got, want) {
+				t.Fatalf("got %+v, %+v; want %+v", got, diagnostics, want)
+			}
+		})
+	}
 }
