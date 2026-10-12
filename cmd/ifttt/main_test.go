@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,3 +94,34 @@ func TestCLI(t *testing.T) {
 		}
 	}
 }
+
+// A failed check/report must never look like a clean run to presubmit.
+func TestCLIFailures(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_PATH", "")
+	t.Setenv("GITHUB_STEP_SUMMARY", "")
+	t.Setenv("GITHUB_ACTIONS", "")
+	r := testutil.NewRepo(t, nil)
+	args := []string{"check", "--repo=" + r.Dir, "--base=" + r.Base}
+	for _, tt := range []struct {
+		name    string
+		extra   []string
+		stdout  io.Writer
+		message string
+	}{
+		{"missing event", []string{"--event=" + filepath.Join(t.TempDir(), "missing.json")}, io.Discard, "read event"},
+		{"bad head", []string{"--head=missing"}, io.Discard, "rev-parse"},
+		{"summary directory", []string{"--summary=" + t.TempDir()}, io.Discard, "open summary"},
+		{"output failure", nil, failingWriter{}, "closed pipe"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			if got := run(append(append([]string{}, args...), tt.extra...), tt.stdout, &stderr); got != 3 || !strings.Contains(stderr.String(), tt.message) {
+				t.Fatalf("exit %d, stderr %s", got, stderr.String())
+			}
+		})
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }

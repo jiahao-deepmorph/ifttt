@@ -13,7 +13,7 @@ import (
 type span struct{ start, count int }
 
 func (s span) intersects(r Region) bool {
-	return s.count > 0 && s.start < r.Close && s.start+s.count > r.Open+1
+	return r.Close > r.Open+1 && s.count > 0 && s.start < r.Close && s.start+s.count > r.Open+1
 }
 
 type hunk struct{ old, new span }

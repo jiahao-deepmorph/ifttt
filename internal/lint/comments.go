@@ -166,8 +166,11 @@ func commentLines(filename, content string) ([]string, []Diagnostic) {
 			}
 			scalarIndent = -1
 		}
-		if style.yaml && open == nil && !strings.HasPrefix(trimmed, "#") && yamlScalar.MatchString(line) {
-			scalarIndent = len(line) - len(strings.TrimLeft(line, " \t"))
+		scalarStart := -1
+		if style.yaml {
+			if match := yamlScalar.FindStringIndex(line); match != nil {
+				scalarStart = match[0] + strings.IndexAny(line[match[0]:match[1]], "|>")
+			}
 		}
 		if style.markdown && blockEnd == "" && open == nil {
 			if fence != "" {
@@ -246,6 +249,20 @@ func commentLines(filename, content string) ([]string, []Diagnostic) {
 				break
 			}
 			standalone = false
+			// Recognize scalar headers only outside strings and comments.
+			// A mapping in a sequence has its key indented past the dash;
+			// sibling keys/comments at that indentation end the scalar.
+			if i == scalarStart {
+				scalarIndent = len(line) - len(strings.TrimLeft(line, " \t"))
+				prefix := strings.TrimSpace(line[:i])
+				if strings.HasSuffix(prefix, ":") {
+					for strings.HasPrefix(prefix, "- ") || strings.HasPrefix(prefix, "-\t") {
+						key := strings.TrimLeft(prefix[1:], " \t")
+						scalarIndent += len(prefix) - len(key)
+						prefix = key
+					}
+				}
+			}
 			if style.markup && line[i] == '<' && i+1 < len(line) && tagStart(line[i+1]) {
 				inTag = true
 			}
