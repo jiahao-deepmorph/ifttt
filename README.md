@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: jiahao-deepmorph/ifttt@v1
+      - uses: jiahao-deepmorph/ifttt@v2
         with:
           fail-on-findings: true # optional; defaults to warnings only
 ```
@@ -191,13 +191,13 @@ also tested without downloading releases.
 
 Release procedure:
 
-1. Set `action-version` to the intended `v1.x.y` and commit it with the release.
+1. Set `action-version` to the intended `vX.Y.Z` and commit it with the release.
 2. Push that exact tag. The release workflow verifies the embedded version,
    tests the project, and uses GoReleaser to publish archives and `checksums.txt`.
-3. After publishing, the workflow moves `v1` to that release commit.
+3. After publishing, the workflow moves the major tag (for example `v2`) to that release commit.
 
 The Action reads its own `action-version` file. It never resolves a floating tag
-to a separate “latest” release. Thus `@v1`, `@v1.x.y`, and a release commit SHA
+to a separate “latest” release. Thus `@v2`, `@v2.x.y`, and a release commit SHA
 all download the binary associated with the checked-out Action code. Untagged
 development commits should be tested by building from source. Using the Action
 requires a published release.
