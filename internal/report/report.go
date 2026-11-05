@@ -69,20 +69,34 @@ func Write(w io.Writer, result lint.Result, reason string, github bool) error {
 			fmt.Fprintf(&out, "ERROR: %s\n", d)
 		}
 	}
-	if reason == "" {
-		for _, f := range result.Findings {
-			message := "IFTTT: " + f.String() + ". If no update is needed, add NO_IFTTT=<reason> to the PR description."
-			if github {
-				filename := f.Path
-				if f.Deleted {
-					filename = ""
-				}
-				out.WriteString(annotation("warning", filename, f.Line, message))
-			} else {
-				fmt.Fprintln(&out, message)
+	// Waived findings stay listed, as notices, so a reviewer sees what the
+	// override accepts.
+	level, prefix, suffix := "warning", "IFTTT: ", ". If no update is needed, add NO_IFTTT=<reason> to the PR description."
+	if reason != "" {
+		level, prefix, suffix = "notice", "IFTTT (waived by NO_IFTTT): ", "."
+	}
+	for _, f := range result.Findings {
+		message := prefix + f.String() + suffix
+		if github {
+			filename := f.Path
+			if f.Deleted {
+				filename = ""
 			}
+			out.WriteString(annotation(level, filename, f.Line, message))
+		} else {
+			fmt.Fprintln(&out, message)
 		}
-	} else {
+	}
+	if reason != "" && len(result.Findings) == 0 {
+		// A PR-wide override with nothing to waive would hide a later,
+		// unrelated finding.
+		message := "IFTTT: NO_IFTTT is set but there are no coupling findings; remove it from the PR description."
+		if github {
+			out.WriteString(annotation("warning", "", 0, message))
+		} else {
+			fmt.Fprintln(&out, message)
+		}
+	} else if reason != "" {
 		// Never print a raw PR body into workflow command output.
 		fmt.Fprintf(&out, "IFTTT: %d coupling finding(s) overridden.\n", len(result.Findings))
 	}
@@ -111,8 +125,15 @@ func Summary(w io.Writer, result lint.Result, reason string) error {
 		}
 		out.WriteString("\n")
 	}
-	if reason == "" && len(result.Findings) > 0 {
-		out.WriteString("| Changed region | Missing counterpart |\n| --- | --- |\n")
+	if reason != "" && len(result.Findings) == 0 {
+		out.WriteString("`NO_IFTTT` is set but there are no coupling findings; remove it from the PR description.\n")
+	}
+	if len(result.Findings) > 0 {
+		heading := "Changed region"
+		if reason != "" {
+			heading += " (waived)"
+		}
+		out.WriteString("| " + heading + " | Missing counterpart |\n| --- | --- |\n")
 		for _, f := range result.Findings {
 			location := fmt.Sprintf("%s:%d-%d", f.Path, f.Start, f.End)
 			if f.Label != "" {
@@ -127,7 +148,9 @@ func Summary(w io.Writer, result lint.Result, reason string) error {
 			}
 			fmt.Fprintf(&out, "| %s | %s |\n", markdown(location), markdown(f.Target.String()))
 		}
-		out.WriteString("\nIf no update is needed, add `NO_IFTTT=<reason>` to the PR description.\n")
+		if reason == "" {
+			out.WriteString("\nIf no update is needed, add `NO_IFTTT=<reason>` to the PR description.\n")
+		}
 	} else if len(result.Errors) == 0 && reason == "" {
 		out.WriteString("No findings.\n")
 	}

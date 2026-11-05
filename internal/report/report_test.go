@@ -78,6 +78,52 @@ func TestAnnotationsAndSummary(t *testing.T) {
 	}
 }
 
+func TestOverriddenFindingsStayVisible(t *testing.T) {
+	waived := lint.Result{Findings: []lint.Finding{{Path: "a.go", Start: 2, End: 4, Line: 3, Label: "pair", Target: lint.Target{Path: "b.md", Label: "pair"}}}}
+	for _, tt := range []struct {
+		result lint.Result
+		github bool
+		want   string
+	}{
+		{waived, false, "IFTTT (waived by NO_IFTTT): a.go:2-4 (pair) changed, but b.md:pair was not.\n" +
+			"IFTTT: 1 coupling finding(s) overridden.\n"},
+		{waived, true, "::notice file=a.go,line=3::IFTTT (waived by NO_IFTTT): a.go:2-4 (pair) changed, but b.md:pair was not.\n" +
+			"IFTTT: 1 coupling finding(s) overridden.\n"},
+		// An override with nothing to waive is stale or routine, and would
+		// hide a later, unrelated finding: say so without failing.
+		{lint.Result{}, false, "IFTTT: NO_IFTTT is set but there are no coupling findings; remove it from the PR description.\n" +
+			"IFTTT: no findings.\n"},
+		{lint.Result{}, true, "::warning::IFTTT: NO_IFTTT is set but there are no coupling findings; remove it from the PR description.\n" +
+			"IFTTT: no findings.\n"},
+	} {
+		var out bytes.Buffer
+		if err := Write(&out, tt.result, "done in #7", tt.github); err != nil {
+			t.Fatal(err)
+		}
+		if out.String() != tt.want {
+			t.Errorf("got:\n%s\nwant:\n%s", out.String(), tt.want)
+		}
+	}
+
+	for _, tt := range []struct {
+		result lint.Result
+		want   string
+	}{
+		{waived, "## IFTTT\n\nCoupling findings overridden: done in #7\n\n" +
+			"| Changed region (waived) | Missing counterpart |\n| --- | --- |\n| a.go:2-4 (pair) | b.md:pair |\n"},
+		{lint.Result{}, "## IFTTT\n\nCoupling findings overridden: done in #7\n\n" +
+			"`NO_IFTTT` is set but there are no coupling findings; remove it from the PR description.\n"},
+	} {
+		var out bytes.Buffer
+		if err := Summary(&out, tt.result, "done in #7"); err != nil {
+			t.Fatal(err)
+		}
+		if out.String() != tt.want {
+			t.Errorf("got:\n%s\nwant:\n%s", out.String(), tt.want)
+		}
+	}
+}
+
 func TestDeletedSourceHasNoHeadLocation(t *testing.T) {
 	var out bytes.Buffer
 	r := lint.Result{Findings: []lint.Finding{{Path: "gone.go", Start: 2, End: 4, Deleted: true, Target: lint.Target{Path: "b.go"}}}}

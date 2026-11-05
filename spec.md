@@ -134,7 +134,7 @@ ui/strings/color_names.py:colors was not.
 If no update is needed, add NO_IFTTT=<reason> to the PR description.
 ```
 
-**Override.** `NO_IFTTT=<reason>` in the PR description silences all coupling findings for that PR. Match a token boundary before `NO_IFTTT`; the reason must contain non-whitespace text on the same line. HTML comments in the description (hidden on GitHub, common in PR templates) are ignored, and so are placeholder reasons that start with `<…>`, such as `<reason>`. The Action reads the description from the event payload. Subscribe to `pull_request.edited` so description edits start a fresh run with the updated body; rerunning an old event does not refresh it. The summary records the reason. Annotation errors are never suppressed.
+**Override.** `NO_IFTTT=<reason>` in the PR description silences all coupling findings for that PR. Match a token boundary before `NO_IFTTT`; the reason must contain non-whitespace text on the same line. HTML comments in the description (hidden on GitHub, common in PR templates) are ignored, and so are placeholder reasons that start with `<…>`, such as `<reason>`. The Action reads the description from the event payload. Subscribe to `pull_request.edited` so description edits start a fresh run with the updated body; rerunning an old event does not refresh it. The summary records the reason. Waived findings are still reported, as notice annotations and in the summary table marked "(waived)"; they no longer fail the job. An override with no coupling findings to waive produces a warning asking to remove it, without failing the job. Annotation errors are never suppressed.
 
 **Exit codes:** `0` clean or overridden, `1` findings with `fail-on-findings`, `2` annotation errors, `3` tool failure.
 
