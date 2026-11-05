@@ -111,7 +111,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # needed to compute the merge base
-      - uses: <owner>/ifttt@v1
+      - uses: <owner>/ifttt@v2
         with:
           fail-on-findings: true   # default false: warn only
 ```
