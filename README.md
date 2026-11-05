@@ -67,6 +67,10 @@ reasons starting with `<…>` are ignored. This suppresses all
 coupling findings for that PR but **never annotation errors**. The `edited` event
 in the example starts a fresh run with the updated description; rerunning an old
 event is not a way to refresh its body. The reason is recorded in the summary.
+Waived findings stay listed: as `::notice` annotations, in the log, and in the
+summary table marked "(waived)", so reviewers see what the override accepts.
+An override on a PR with no coupling findings prints a warning (without failing)
+asking to remove it, since it would silently waive any later finding.
 
 ## Build and run
 
