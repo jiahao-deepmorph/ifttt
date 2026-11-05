@@ -57,19 +57,25 @@ func TestCLI(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	writeEvent("NO_IFTTT=already done")
+	writeEvent("NO_IFTTT(a)=already done")
 	t.Setenv("GITHUB_EVENT_PATH", eventPath)
 	t.Setenv("GITHUB_STEP_SUMMARY", summary)
 	t.Setenv("GITHUB_ACTIONS", "true")
 	var out bytes.Buffer
 	// HEAD and worktree deliberately differ from the event's head SHA.
 	r.Git("checkout", "--detach", r.Base)
-	if got := run([]string{"check", "--repo=" + r.Dir, "--fail-on-findings"}, &out, &out); got != 0 || !strings.Contains(out.String(), "1 coupling finding(s) overridden") {
+	if got := run([]string{"check", "--repo=" + r.Dir, "--fail-on-findings"}, &out, &out); got != 0 || !strings.Contains(out.String(), "1 coupling finding(s) waived") {
 		t.Fatalf("exit %d, %s", got, out.String())
 	}
 	data, err := os.ReadFile(summary)
-	if err != nil || !strings.Contains(string(data), "already done") {
+	if err != nil || !strings.Contains(string(data), "NO_IFTTT(a): already done") {
 		t.Fatalf("summary %s, %v", data, err)
+	}
+	// A PR-wide override waives nothing.
+	writeEvent("NO_IFTTT=already done")
+	out.Reset()
+	if got := run([]string{"check", "--repo=" + r.Dir, "--fail-on-findings"}, &out, &out); got != 1 || !strings.Contains(out.String(), "an unscoped NO_IFTTT=<reason> waives nothing") {
+		t.Fatalf("exit %d, %s", got, out.String())
 	}
 	writeEvent("")
 	out.Reset()
@@ -80,7 +86,7 @@ func TestCLI(t *testing.T) {
 	r.Git("checkout", "--detach", head)
 	r.Write(map[string]string{"a.go": "// LINT.IfChange\n"})
 	head = r.Commit()
-	writeEvent("NO_IFTTT=skip")
+	writeEvent("NO_IFTTT(a)=skip")
 	out.Reset()
 	if got := run([]string{"check", "--repo=" + r.Dir}, &out, &out); got != 2 || !strings.Contains(out.String(), "::error") {
 		t.Fatalf("exit %d, %s", got, out.String())

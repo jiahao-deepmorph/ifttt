@@ -19,7 +19,7 @@ IFTTT ("If This Then That") is a presubmit check that warns when a change edits 
 - Guard related changes: authors declare a coupling between regions with `LINT.IfChange` / `LINT.ThenChange` comments.
 - On every pull request, a GitHub Action reports each guarded region that changed while a declared counterpart did not.
 - Findings show up where reviewers look: inline on the PR's changed files and in the job summary.
-- One escape hatch: `NO_IFTTT=<reason>` in the PR description.
+- One escape hatch: `NO_IFTTT(<label>)=<reason>` in the PR description, waiving one labelled region's findings.
 
 **Non-goals**
 
@@ -28,7 +28,7 @@ IFTTT ("If This Then That") is a presubmit check that warns when a change edits 
 
 **Later (cut from v1)**
 
-- Per-target overrides, strict/blocking mode per directory, and per-directory config files.
+- Per-target waivers, strict/blocking mode per directory, and per-directory config files.
 - Working-tree/staged-file mode and a pre-commit hook. The v1 CLI can check committed refs locally.
 - Nightly repo-wide validation of broken links.
 - Rename tracking, generated-file warnings, and special handling for large codemods.
@@ -80,7 +80,7 @@ A warning fires when a change modifies lines inside a guarded region and, for at
 4. For each target of a triggered region, decide whether it was **satisfied**:
    - Whole-file target: satisfied if the file has any change in this CL.
    - Labeled target: inspect the label in both versions; removals inside the old body or additions inside the new body satisfy it. A deleted target file also counts as satisfied.
-5. Each unsatisfied target produces one finding, unless overridden (see Presubmit integration).
+5. Each unsatisfied target produces one finding, unless waived (see Presubmit integration).
 
 **What counts as a change**
 
@@ -120,7 +120,7 @@ jobs:
 
 | Input | Default | Meaning |
 | --- | --- | --- |
-| `fail-on-findings` | `false` | Fail the job when there are unoverridden findings. |
+| `fail-on-findings` | `false` | Fail the job when there are unwaived findings. |
 | `base-ref` | PR base SHA from event | Ref used to compute the merge base; rarely needed. |
 
 **Reporting**
@@ -131,16 +131,16 @@ jobs:
 ```
 IFTTT: ui/color.h:12-18 (colors) changed, but
 ui/strings/color_names.py:colors was not.
-If no update is needed, add NO_IFTTT=<reason> to the PR description.
+If no update is needed, add NO_IFTTT(colors)=<reason> to the PR description.
 ```
 
-**Override.** `NO_IFTTT=<reason>` in the PR description silences all coupling findings for that PR. Match a token boundary before `NO_IFTTT`; the reason must contain non-whitespace text on the same line. HTML comments in the description (hidden on GitHub, common in PR templates) are ignored, and so are placeholder reasons that start with `<…>`, such as `<reason>`. The Action reads the description from the event payload. Subscribe to `pull_request.edited` so description edits start a fresh run with the updated body; rerunning an old event does not refresh it. The summary records the reason. Waived findings are still reported, as notice annotations and in the summary table marked "(waived)"; they no longer fail the job. An override with no coupling findings to waive produces a warning asking to remove it, without failing the job. Annotation errors are never suppressed.
+**Waivers.** `NO_IFTTT(<scope>)=<reason>` in the PR description waives the findings of the changed region it names. The scope is the region's label, or `<path>:<label>` with the changed file's path; one waiver per line. Regions without a label cannot be waived. A PR-wide `NO_IFTTT=<reason>` waives nothing and produces a warning, as does a waiver that matches no finding; neither fails the job. Match a token boundary before `NO_IFTTT`; the reason must contain non-whitespace text on the same line. HTML comments in the description (hidden on GitHub, common in PR templates) are ignored, and so are placeholder scopes and reasons that start with `<…>`, such as `<label>` and `<reason>`. The Action reads the description from the event payload. Subscribe to `pull_request.edited` so description edits start a fresh run with the updated body; rerunning an old event does not refresh it. Waived findings are still reported, as notice annotations and in the summary table with the waiver and its reason; the log never prints a reason, which is raw PR text. Annotation errors are never waived.
 
-**Exit codes:** `0` clean or overridden, `1` findings with `fail-on-findings`, `2` annotation errors, `3` tool failure.
+**Exit codes:** `0` clean or every finding waived, `1` findings with `fail-on-findings`, `2` annotation errors, `3` tool failure.
 
 ## Annotation validation
 
-Head annotations in changed files are validated on every run, including new and untriggered regions. Every declared target must exist at head. Labeled target files are also parsed and syntax-checked, without recursively validating their outgoing links. Historical parse errors are ignored so they can be fixed or deleted. Validation errors always fail the job (exit code `2`) and cannot be silenced with `NO_IFTTT`, because a broken link silently guards nothing. Incoming references from untouched source files are outside this validation scope.
+Head annotations in changed files are validated on every run, including new and untriggered regions. Every declared target must exist at head. Labeled target files are also parsed and syntax-checked, without recursively validating their outgoing links. Historical parse errors are ignored so they can be fixed or deleted. Validation errors always fail the job (exit code `2`) and cannot be waived with `NO_IFTTT`, because a broken link silently guards nothing. Incoming references from untouched source files are outside this validation scope.
 
 | Error | Example |
 | --- | --- |
@@ -159,7 +159,7 @@ Head annotations in changed files are validated on every run, including new and 
 | Target file deleted in the PR | Counts as satisfied. Remaining links in changed source files are validation errors; untouched sources are not searched. |
 | Target file renamed in the PR | Treated as delete + add: the old path is satisfied; stale links in changed source files are validation errors. |
 | Source and target in the same file | Supported via `:label`, evaluated against the same diff. |
-| Coupled change split across PRs | Each PR is checked alone; use `NO_IFTTT=done in #123`. |
+| Coupled change split across PRs | Each PR is checked alone; use `NO_IFTTT(<label>)=done in #123`. |
 | Cycles (A → B → A) | Fine. Checking is one hop only, so cycles cannot loop. |
 
 ## Architecture
@@ -172,7 +172,7 @@ flowchart LR
   B --> C[Parse changed snapshots]
   C --> D[Validate head annotations and targets]
   D --> E[Match regions and check obligations]
-  E --> F[Apply override and report]
+  E --> F[Apply waivers and report]
 ```
 
 Changed files are scanned as sources in both versions. Target contents are loaded lazily for head validation and triggered coupling checks, with a per-run cache. Tree metadata is enumerated without parsing unchanged file contents. There is no persistent index or recursive link traversal.
@@ -206,7 +206,7 @@ Binaries are hosted as GitHub Release assets in the same repository as the Actio
 
 1. **Core library + CLI.** Parser, diff reader, matcher, and `ifttt check --base <ref>` printing findings and exiting with the codes above.
 2. **Fixture tests.** Cover each rule in Detection semantics and every validation error, including deleted lines and edits on marker lines.
-3. **GitHub output.** Workflow annotations, job summary, and the `NO_IFTTT` override read from the event payload.
+3. **GitHub output.** Workflow annotations, job summary, and the `NO_IFTTT` waivers read from the event payload.
 4. **Release.** GoReleaser binaries plus a composite `action.yml`; tag `v1`.
 5. **Dogfood.** Run it in one or two of your own repos in warn-only mode for a few weeks, then publish to the GitHub Marketplace.
 

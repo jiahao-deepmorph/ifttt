@@ -60,17 +60,23 @@ annotations inline when they map to the PR diff. Removed files and deletion-only
 changes use a general or file annotation plus the summary; they have no added
 line to annotate. No review comments or write token are needed.
 
-Put `NO_IFTTT=<reason>` in the PR description to suppress coupling warnings. The
-reason must contain non-whitespace text on the same line. Text inside HTML
-comments (`<!-- … -->`, hidden by GitHub, as in PR templates) and placeholder
-reasons starting with `<…>` are ignored. This suppresses all
-coupling findings for that PR but **never annotation errors**. The `edited` event
-in the example starts a fresh run with the updated description; rerunning an old
-event is not a way to refresh its body. The reason is recorded in the summary.
-Waived findings stay listed: as `::notice` annotations, in the log, and in the
-summary table marked "(waived)", so reviewers see what the override accepts.
-An override on a PR with no coupling findings prints a warning (without failing)
-asking to remove it, since it would silently waive any later finding.
+If a counterpart really needs no edit, waive that one finding with a line
+`NO_IFTTT(<label>)=<reason>` in the PR description, naming the changed region's
+label; use `NO_IFTTT(<path>:<label>)=<reason>` when unrelated pairs share the
+label. One line per region. A finding on an unlabelled region cannot be waived:
+give the region a label first. A waiver covers only the findings of the region
+it names, so a later push that changes another guarded region still fails.
+
+The reason must contain non-whitespace text on the same line. Text inside HTML
+comments (`<!-- … -->`, hidden by GitHub, as in PR templates) and placeholders
+starting with `<…>` are ignored. Waivers **never cover annotation errors**. The
+`edited` event in the example starts a fresh run with the updated description;
+rerunning an old event is not a way to refresh its body.
+
+Waived findings stay listed, as `::notice` annotations in the log and in the
+summary table with the waiver and its reason, so reviewers see what each waiver
+accepts. A waiver that matches no finding, and a PR-wide `NO_IFTTT=<reason>`
+(which waives nothing), each print a warning without failing the job.
 
 ## Build and run
 
@@ -83,7 +89,7 @@ go build -o bin/ifttt ./cmd/ifttt
 ```
 
 This checks **committed changes**; staged and unstaged edits are excluded. With a
-PR event available, base, head, and override default from `GITHUB_EVENT_PATH`.
+PR event available, base, head, and waivers default from `GITHUB_EVENT_PATH`.
 Use `--event=` to disable event loading for an explicit local check.
 
 Additional flags: `--repo <directory>`, `--github` (workflow annotations),
@@ -93,7 +99,7 @@ GitHub output defaults on when `GITHUB_ACTIONS=true`; the summary defaults to
 
 | Exit | Meaning |
 | --- | --- |
-| 0 | Clean, warnings only, or overridden |
+| 0 | Clean, warnings only, or every finding waived |
 | 1 | Coupling findings with `--fail-on-findings` |
 | 2 | Invalid annotations, including missing targets |
 | 3 | Invalid invocation, Git failure, event/output failure, or Action setup failure |
@@ -110,7 +116,7 @@ GitHub output defaults on when `GITHUB_ACTIONS=true`; the summary defaults to
   not trigger. Empty regions have no body to trigger.
 - When an existing body's content changes, the union of its old and new target
   lists applies. Removing a dependency in the same edit cannot erase an old
-  obligation; use the PR override if the counterpart really needs no edit.
+  obligation; waive it with `NO_IFTTT(<label>)` if the counterpart really needs no edit.
 - A labeled target is satisfied by body additions at head or body removals at
   the merge base. Whole-file targets accept any Git change, including mode-only
   changes and deletion. Deleting an entire target file satisfies its obligation.
