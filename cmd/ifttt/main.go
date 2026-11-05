@@ -46,7 +46,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	base := flags.String("base", "", "base ref (default: PR base SHA)")
 	head := flags.String("head", "", "head ref (default: PR head SHA or HEAD)")
 	repo := flags.String("repo", ".", "repository directory")
-	fail := flags.Bool("fail-on-findings", false, "exit 1 for unoverridden coupling findings")
+	fail := flags.Bool("fail-on-findings", false, "exit 1 for unwaived coupling findings")
 	github := flags.Bool("github", os.Getenv("GITHUB_ACTIONS") == "true", "emit GitHub workflow annotations")
 	eventPath := flags.String("event", os.Getenv("GITHUB_EVENT_PATH"), "PR event JSON path; empty disables event loading")
 	summary := flags.String("summary", os.Getenv("GITHUB_STEP_SUMMARY"), "append a Markdown job summary to this file")
@@ -63,7 +63,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if flags.NArg() != 0 {
 		return failure(fmt.Errorf("unexpected arguments: %v", flags.Args()))
 	}
-	var reason string
+	var waivers []report.Waiver
+	var unscoped bool
 	if *eventPath != "" {
 		data, err := os.ReadFile(*eventPath)
 		if err != nil {
@@ -85,13 +86,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 			}
 			*head = e.PullRequest.Head.SHA
 		}
-		reason = report.Override(e.PullRequest.Body)
+		waivers, unscoped = report.Waivers(e.PullRequest.Body)
 	}
 	result, err := lint.Check(lint.Options{Dir: *repo, Base: *base, Head: *head})
 	if err != nil {
 		return failure(err)
 	}
-	if err := report.Write(stdout, result, reason, *github); err != nil {
+	r := report.Apply(result, waivers, unscoped)
+	if err := report.Write(stdout, r, *github); err != nil {
 		return failure(err)
 	}
 	if *summary != "" {
@@ -99,7 +101,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if err != nil {
 			return failure(fmt.Errorf("open summary: %w", err))
 		}
-		writeErr := report.Summary(file, result, reason)
+		writeErr := report.Summary(file, r)
 		closeErr := file.Close()
 		if writeErr != nil {
 			return failure(fmt.Errorf("write summary: %w", writeErr))
@@ -108,5 +110,5 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return failure(closeErr)
 		}
 	}
-	return report.ExitCode(result, reason, *fail)
+	return report.ExitCode(r, *fail)
 }
